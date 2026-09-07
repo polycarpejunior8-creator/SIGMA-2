@@ -1,0 +1,127 @@
+name: Build SIGMA Windows Installer
+
+# Se déclenche manuellement, sur push vers main, ou sur un tag de version
+# (ex: v1.0.0 déclenche aussi la publication d'une Release GitHub avec le .exe joint).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+env:
+  # ⚠️ URL de PostgreSQL portable (binaires "zip", sans installeur).
+  # EnterpriseDB republie régulièrement de nouvelles versions à des URL
+  # versionnées ; si ce lien casse (erreur 404 dans le job), allez chercher
+  # le lien à jour sur https://www.enterprisedb.com/download-postgresql-binaries
+  # et mettez à jour PG_ZIP_URL ci-dessous.
+  PG_VERSION: "16.4-1"
+  PG_ZIP_URL: "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-windows-x64-binaries.zip"
+  NSSM_ZIP_URL: "https://nssm.cc/release/nssm-2.24.zip"
+
+jobs:
+  build-installer:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout du dépôt
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # 1. Frontend : build React → client/dist
+      # ------------------------------------------------------------------
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: client/package.json
+
+      - name: Installer les dépendances frontend
+        working-directory: client
+        run: npm install
+
+      - name: Compiler le frontend
+        working-directory: client
+        run: npm run build
+
+      # ------------------------------------------------------------------
+      # 2. Backend : figer en exécutable avec PyInstaller
+      # ------------------------------------------------------------------
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer les dépendances backend + PyInstaller
+        working-directory: server
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Compiler SigmaServer.exe
+        run: pyinstaller deployment/pyinstaller/sigma-server.spec --distpath dist --workpath build --noconfirm
+
+      # ------------------------------------------------------------------
+      # 3. Télécharger PostgreSQL portable (binaires zip, sans installeur)
+      # ------------------------------------------------------------------
+      - name: Télécharger PostgreSQL portable
+        run: |
+          Invoke-WebRequest -Uri "${{ env.PG_ZIP_URL }}" -OutFile pgsql.zip
+          Expand-Archive -Path pgsql.zip -DestinationPath pgsql_extracted
+
+      # ------------------------------------------------------------------
+      # 4. Télécharger NSSM (wrapper de service Windows)
+      # ------------------------------------------------------------------
+      - name: Télécharger NSSM
+        run: |
+          Invoke-WebRequest -Uri "${{ env.NSSM_ZIP_URL }}" -OutFile nssm.zip
+          Expand-Archive -Path nssm.zip -DestinationPath nssm_extracted
+
+      # ------------------------------------------------------------------
+      # 5. Assembler le dossier de staging attendu par installer.iss
+      # ------------------------------------------------------------------
+      - name: Assembler dist_staging
+        run: |
+          New-Item -ItemType Directory -Force -Path deployment\inno-setup\dist_staging | Out-Null
+
+          # SigmaServer.exe + _internal\ (sortie PyInstaller onedir)
+          Copy-Item -Recurse -Force dist\SigmaServer\* deployment\inno-setup\dist_staging\
+
+          # PostgreSQL portable (le zip contient un dossier "pgsql\")
+          Copy-Item -Recurse -Force pgsql_extracted\pgsql deployment\inno-setup\dist_staging\pgsql
+
+          # Frontend compilé
+          New-Item -ItemType Directory -Force -Path deployment\inno-setup\dist_staging\webapp | Out-Null
+          Copy-Item -Recurse -Force client\dist\* deployment\inno-setup\dist_staging\webapp\
+
+          # NSSM (architecture 64 bits)
+          Copy-Item -Force nssm_extracted\nssm-2.24\win64\nssm.exe deployment\inno-setup\dist_staging\nssm.exe
+
+      # ------------------------------------------------------------------
+      # 6. Compiler l'installateur avec Inno Setup
+      # ------------------------------------------------------------------
+      - name: Installer Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Compiler Setup_SIGMA.exe
+        working-directory: deployment/inno-setup
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+      # ------------------------------------------------------------------
+      # 7. Publier le résultat
+      # ------------------------------------------------------------------
+      - name: Publier l'installateur comme artefact du build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Setup_SIGMA
+          path: deployment/inno-setup/Output/Setup_SIGMA.exe
+          retention-days: 30
+
+      - name: Publier une Release GitHub (uniquement sur un tag vX.Y.Z)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: deployment/inno-setup/Output/Setup_SIGMA.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
