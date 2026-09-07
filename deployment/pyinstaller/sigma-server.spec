@@ -1,22 +1,4 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""
-Spec PyInstaller pour SigmaServer.exe.
-
-IMPORTANT : ce spec doit être invoqué depuis la RACINE du dépôt (là où se
-trouvent les dossiers `server/`, `client/`, `deployment/`) :
-
-    pyinstaller deployment/pyinstaller/sigma-server.spec --distpath dist --workpath build
-
-C'est ce que fait .github/workflows/build-windows-installer.yml automatiquement.
-
-Construit un exécutable "onedir" (un .exe + un dossier _internal contenant le
-runtime Python et les dépendances) plutôt que "onefile", pour un démarrage plus
-rapide (pas de ré-extraction à chaque lancement) et un débogage plus simple.
-
-Le dossier `pgsql/` (binaires PostgreSQL portables) et `webapp/` (build React)
-ne sont PAS inclus ici : ils sont assemblés à côté de l'exécutable par le
-workflow CI avant l'appel à Inno Setup, pour garder ce spec simple.
-"""
 block_cipher = None
 
 a = Analysis(
@@ -82,7 +64,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,  # conserve les logs ; NSSM redirige stdout/stderr vers un fichier
+    console=True,
     icon=None,
 )
 
@@ -96,4 +78,3 @@ coll = COLLECT(
     upx_exclude=[],
     name="SigmaServer",
 )
-Correction des chemins dans sigma-server.spec
