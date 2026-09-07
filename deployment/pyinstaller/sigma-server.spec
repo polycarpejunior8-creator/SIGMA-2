@@ -20,8 +20,8 @@ workflow CI avant l'appel à Inno Setup, pour garder ce spec simple.
 block_cipher = None
 
 a = Analysis(
-    ["deployment/pyinstaller/launcher.py"],
-    pathex=["server"],
+    ["launcher.py"],
+    pathex=["../../server"],
     binaries=[],
     datas=[],
     hiddenimports=[
@@ -96,3 +96,4 @@ coll = COLLECT(
     upx_exclude=[],
     name="SigmaServer",
 )
+Correction des chemins dans sigma-server.spec
