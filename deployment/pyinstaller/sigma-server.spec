@@ -1,9 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+
+SERVER_DIR = os.path.join(SPECPATH, "..", "..", "server")
+LAUNCHER_SCRIPT = os.path.join(SPECPATH, "launcher.py")
+
 block_cipher = None
 
 a = Analysis(
-    ["launcher.py"],
-    pathex=["../../server"],
+    [LAUNCHER_SCRIPT],
+    pathex=[SERVER_DIR],
     binaries=[],
     datas=[],
     hiddenimports=[
