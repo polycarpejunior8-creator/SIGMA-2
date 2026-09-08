@@ -210,8 +210,11 @@ def main() -> None:
     try:
         from app import seed
         seed.main()
-    except Exception as exc:  # noqa: BLE001
-        log(f"ERREUR lors de l'initialisation de la base : {exc}")
+       except Exception:  # noqa: BLE001
+        import traceback
+        log("ERREUR lors de l'initialisation de la base :")
+        for line in traceback.format_exc().splitlines():
+            log("  " + line)
         stop_postgres()
         sys.exit(1)
 
