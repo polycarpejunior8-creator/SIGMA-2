@@ -28,6 +28,16 @@ import sys
 import time
 from pathlib import Path
 
+# Force l'UTF-8 en sortie, quel que soit le contexte d'exécution. Nécessaire
+# car un service Windows (contrairement à une fenêtre de console interactive)
+# utilise par défaut l'ancien "code page" du système, qui ne sait pas encoder
+# des caractères comme "✔" — cela provoquait un plantage silencieux au tout
+# premier print() les utilisant (cf app/seed.py).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 
 def _app_dir() -> Path:
     """Dossier contenant l'exécutable (ou ce script, en mode non-figé)."""
@@ -146,7 +156,7 @@ def _start_postgres_process() -> None:
         "start",
         "-D", str(PG_DATA_DIR),
         "-l", str(PG_LOG_FILE),
-        "-w",  # attend que le serveur soit prêt avant de rendre la main
+        "-w",
         "-t", "60",
     ])
     _pg_process.wait()
@@ -184,7 +194,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
     if hasattr(signal, "SIGBREAK"):
-        signal.signal(signal.SIGBREAK, handle_shutdown)  # CTRL_BREAK envoyé par NSSM sous Windows
+        signal.signal(signal.SIGBREAK, handle_shutdown)
 
     first_run = is_first_run()
 
@@ -199,9 +209,6 @@ def main() -> None:
         log("ERREUR : PostgreSQL n'a pas pu démarrer. Consultez " + str(PG_LOG_FILE))
         sys.exit(1)
 
-    # Charge la configuration (.env) générée lors de l'initialisation, puis
-    # importe l'application seulement APRÈS avoir positionné les variables
-    # d'environnement (app.config les lit au moment de l'import).
     from dotenv import load_dotenv
     load_dotenv(ENV_FILE)
     os.environ["SIGMA_WEBAPP_DIR"] = str(WEBAPP_DIR)
@@ -210,7 +217,7 @@ def main() -> None:
     try:
         from app import seed
         seed.main()
-       except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         import traceback
         log("ERREUR lors de l'initialisation de la base :")
         for line in traceback.format_exc().splitlines():
